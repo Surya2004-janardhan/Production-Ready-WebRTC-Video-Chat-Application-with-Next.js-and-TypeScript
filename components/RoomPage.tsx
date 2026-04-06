@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useSignaling } from '@/hooks/useSignaling';
 import { useUserMedia } from '@/hooks/useUserMedia';
 import { useWebRTC } from '@/hooks/useWebRTC';
+import { useChat } from '@/hooks/useChat';
 import VideoTile from '@/components/VideoTile';
 import CallControls from '@/components/CallControls';
-import type { ConnectionStatus } from '@/lib/types/signaling';
+import ChatPanel from '@/components/ChatPanel';
+import type { ConnectionStatus, ChatMessagePayload } from '@/lib/types/signaling';
 
 interface Props {
   roomId: string;
@@ -19,11 +21,18 @@ export default function RoomPage({ roomId }: Props) {
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [myName] = useState(() => `User-${Math.floor(Math.random() * 1000)}`);
 
   // 1. Get local media
   const { localStream, error: mediaError, isLoading: mediaLoading, stopTracks } = useUserMedia();
 
-  // 2. Setup signaling
+  // 2. Chat logic
+  const { messages, send: sendChat, receive: receiveChat } = useChat(
+    (msg, sender, ts) => signaling.sendChatMessage(msg, sender, ts),
+    myName
+  );
+
+  // 3. Setup signaling
   const signaling = useSignaling(roomId, {
     onAllUsers: (users) => {
       console.log('[room] all users:', users);
@@ -47,9 +56,10 @@ export default function RoomPage({ roomId }: Props) {
     onIceCandidate: ({ candidate, from }) => {
       if (from) handleIceCandidate(candidate, from);
     },
-    onChatMessage: (payload) => {
-      // Chat logic will be in Phase 5, for now we just log
-      console.log('[room] chat received:', payload);
+    onChatMessage: (payload: ChatMessagePayload) => {
+      if (signaling.socket.current?.id) {
+        receiveChat(payload, signaling.socket.current.id);
+      }
     }
   });
 
@@ -60,7 +70,7 @@ export default function RoomPage({ roomId }: Props) {
     disconnect: disconnectSignaling 
   } = signaling;
 
-  // 3. Setup WebRTC mesh logic
+  // 4. Setup WebRTC mesh logic
   const {
     remoteStreams,
     initiateCall,
@@ -76,7 +86,7 @@ export default function RoomPage({ roomId }: Props) {
     onStatusChange: (newStatus) => setStatus(newStatus)
   });
 
-  // 4. Control Handlers
+  // 5. Control Handlers
   const toggleMic = useCallback(() => {
     if (localStream) {
       const audioTrack = localStream.getAudioTracks()[0];
@@ -170,10 +180,11 @@ export default function RoomPage({ roomId }: Props) {
         </div>
 
         <button 
-          className="ctrl-btn" 
-          style={{ minWidth: 'auto', padding: '0.4rem 0.8rem' }}
+          className={`ctrl-btn ${showChat ? 'ctrl-btn--active' : ''}`}
+          style={{ minWidth: 'auto', padding: '0.4rem 0.8rem', flexDirection: 'row', gap: '0.4rem' }}
           onClick={() => setShowChat(!showChat)}
         >
+          <svg fill="currentColor" viewBox="0 0 24 24" style={{width: 16, height: 16}}><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
           {showChat ? 'Hide Chat' : 'Show Chat'}
         </button>
       </header>
@@ -214,35 +225,13 @@ export default function RoomPage({ roomId }: Props) {
           )}
         </div>
 
-        {/* Chat Sidebar (Phase 4 UI Placeholder) */}
+        {/* Chat Sidebar */}
         {showChat && (
-          <aside className="chat-sidebar">
-            <div className="chat-sidebar__header">
-              <span>Chat</span>
-              <small>({roomId.slice(0, 4)})</small>
-            </div>
-            <div className="chat-log" data-test-id="chat-log">
-              <div className="chat-message" data-test-id="chat-message">
-                <div className="chat-message__sender">System</div>
-                Welcome to the room! Chat functionality will be live in Phase 5.
-              </div>
-            </div>
-            <div className="chat-sidebar__input-row">
-              <input 
-                data-test-id="chat-input"
-                className="chat-input" 
-                placeholder="Type a message..." 
-                disabled 
-              />
-              <button 
-                data-test-id="chat-submit"
-                className="chat-submit" 
-                disabled
-              >
-                Send
-              </button>
-            </div>
-          </aside>
+          <ChatPanel 
+            messages={messages} 
+            onSendMessage={sendChat} 
+            roomId={roomId} 
+          />
         )}
       </main>
 
