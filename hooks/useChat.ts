@@ -19,6 +19,8 @@ export function useChat(
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const receive = useCallback((payload: ChatMessagePayload, mySocketId: string) => {
+    if (payload.from === mySocketId) return; // Already added optimistically
+    
     setMessages((prev) => [
       ...prev,
       {
@@ -26,7 +28,7 @@ export function useChat(
         message: payload.message,
         sender: payload.sender,
         timestamp: payload.timestamp,
-        fromSelf: payload.from === mySocketId,
+        fromSelf: false,
         socketId: payload.from,
       },
     ]);
