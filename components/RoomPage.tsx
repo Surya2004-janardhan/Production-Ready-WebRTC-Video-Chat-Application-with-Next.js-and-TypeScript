@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSignaling } from '@/hooks/useSignaling';
 import { useUserMedia } from '@/hooks/useUserMedia';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import VideoTile from '@/components/VideoTile';
+import CallControls from '@/components/CallControls';
 import type { ConnectionStatus } from '@/lib/types/signaling';
 
 interface Props {
@@ -12,12 +14,16 @@ interface Props {
 }
 
 export default function RoomPage({ roomId }: Props) {
+  const router = useRouter();
   const [status, setStatus] = useState<ConnectionStatus>('waiting');
-  
+  const [isMuted, setIsMuted] = useState(false);
+  const [isCameraOff, setIsCameraOff] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+
   // 1. Get local media
   const { localStream, error: mediaError, isLoading: mediaLoading, stopTracks } = useUserMedia();
 
-  // 2. Setup signaling outbound helpers (stubs for now, will be wired below)
+  // 2. Setup signaling
   const signaling = useSignaling(roomId, {
     onAllUsers: (users) => {
       console.log('[room] all users:', users);
@@ -26,7 +32,6 @@ export default function RoomPage({ roomId }: Props) {
     },
     onUserJoined: ({ callerId }) => {
       console.log('[room] user joined:', callerId);
-      // Wait for them to send us an offer in mesh-topology
       setStatus('connecting');
     },
     onUserDisconnected: ({ socketId }) => {
@@ -42,6 +47,10 @@ export default function RoomPage({ roomId }: Props) {
     onIceCandidate: ({ candidate, from }) => {
       if (from) handleIceCandidate(candidate, from);
     },
+    onChatMessage: (payload) => {
+      // Chat logic will be in Phase 5, for now we just log
+      console.log('[room] chat received:', payload);
+    }
   });
 
   const { 
@@ -66,6 +75,34 @@ export default function RoomPage({ roomId }: Props) {
     sendIceCandidate,
     onStatusChange: (newStatus) => setStatus(newStatus)
   });
+
+  // 4. Control Handlers
+  const toggleMic = useCallback(() => {
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMuted(!audioTrack.enabled);
+      }
+    }
+  }, [localStream]);
+
+  const toggleCamera = useCallback(() => {
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsCameraOff(!videoTrack.enabled);
+      }
+    }
+  }, [localStream]);
+
+  const handleHangUp = useCallback(() => {
+    hangUp();
+    stopTracks();
+    disconnectSignaling();
+    router.push('/');
+  }, [hangUp, stopTracks, disconnectSignaling, router]);
 
   // Handle cleanup on unmount
   useEffect(() => {
@@ -131,6 +168,14 @@ export default function RoomPage({ roomId }: Props) {
             </div>
           )}
         </div>
+
+        <button 
+          className="ctrl-btn" 
+          style={{ minWidth: 'auto', padding: '0.4rem 0.8rem' }}
+          onClick={() => setShowChat(!showChat)}
+        >
+          {showChat ? 'Hide Chat' : 'Show Chat'}
+        </button>
       </header>
 
       <main className="room__body">
@@ -148,7 +193,7 @@ export default function RoomPage({ roomId }: Props) {
               />
             ))}
             
-            {remoteStreams.size === 0 && status === 'waiting' && (
+            {remoteStreams.size === 0 && (
               <div className="waiting-placeholder">
                 <div className="waiting-placeholder__icon">👋</div>
                 <p>You're the only one here</p>
@@ -168,14 +213,46 @@ export default function RoomPage({ roomId }: Props) {
             </div>
           )}
         </div>
+
+        {/* Chat Sidebar (Phase 4 UI Placeholder) */}
+        {showChat && (
+          <aside className="chat-sidebar">
+            <div className="chat-sidebar__header">
+              <span>Chat</span>
+              <small>({roomId.slice(0, 4)})</small>
+            </div>
+            <div className="chat-log" data-test-id="chat-log">
+              <div className="chat-message" data-test-id="chat-message">
+                <div className="chat-message__sender">System</div>
+                Welcome to the room! Chat functionality will be live in Phase 5.
+              </div>
+            </div>
+            <div className="chat-sidebar__input-row">
+              <input 
+                data-test-id="chat-input"
+                className="chat-input" 
+                placeholder="Type a message..." 
+                disabled 
+              />
+              <button 
+                data-test-id="chat-submit"
+                className="chat-submit" 
+                disabled
+              >
+                Send
+              </button>
+            </div>
+          </aside>
+        )}
       </main>
 
-      {/* Placeholder for controls (Phase 4) */}
-      <footer className="controls">
-        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-          Controls coming in Phase 4...
-        </div>
-      </footer>
+      <CallControls 
+        isMuted={isMuted} 
+        isCameraOff={isCameraOff}
+        onToggleMic={toggleMic}
+        onToggleCamera={toggleCamera}
+        onHangUp={handleHangUp}
+      />
     </div>
   );
 }
