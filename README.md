@@ -65,7 +65,3 @@ A health check API is available at `/api/health`. Automated tests for signaling 
 ```bash
 npm test
 ```
-
-## 🛡️ License
-
-This project is built for the GPP Advanced Agentic Coding task.
