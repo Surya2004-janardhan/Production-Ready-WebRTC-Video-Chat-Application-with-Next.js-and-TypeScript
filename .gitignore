@@ -1,1 +1,5 @@
 task-requirements.txt
+node_modules
+
+plan.md
+.env
