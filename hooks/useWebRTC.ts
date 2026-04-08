@@ -33,6 +33,16 @@ export function useWebRTC(localStream: MediaStream | null, handlers: WebRTCHandl
         localStream.getTracks().forEach((track) => {
           pc.addTrack(track, localStream);
         });
+      } else {
+        // If we have no local tracks, add recvonly transceivers so
+        // createOffer includes m= lines and a BUNDLE group when
+        // `bundlePolicy: 'max-bundle'` is configured on the PC.
+        try {
+          pc.addTransceiver('audio', { direction: 'recvonly' });
+          pc.addTransceiver('video', { direction: 'recvonly' });
+        } catch (e) {
+          // Some runtimes may not support addTransceiver; ignore silently
+        }
       }
 
       // Trickle ICE — send candidates immediately as discovered
