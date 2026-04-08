@@ -38,22 +38,23 @@ describe('Socket handler unit behaviors', () => {
     const roomId = 'cleanup-room';
     const otherClient = Client(`http://localhost:${port}`);
 
-    let connected = 0;
-    const checkDone = () => { connected++; if (connected === 2) proceed(); };
+    otherClient.on('connect', () => {
+      // both clients join the room
+      client.emit('join-room', { roomId });
+      otherClient.emit('join-room', { roomId });
 
-    client.emit('join-room', { roomId });
-    otherClient.on('connect', () => checkDone());
-    otherClient.on('connect', () => otherClient.emit('join-room', { roomId }));
+      // small delay to ensure server processed joins
+      setTimeout(() => {
+        client.once('user-disconnected', (payload: any) => {
+          expect(payload.socketId).toBeDefined();
+          // cleanup
+          otherClient.close();
+          done();
+        });
 
-    function proceed() {
-      // both in room now; disconnect otherClient and ensure server emits user-disconnected
-      client.once('user-disconnected', (payload: any) => {
-        expect(payload.socketId).toBeDefined();
+        // trigger disconnect for other client
         otherClient.close();
-        done();
-      });
-
-      otherClient.close();
-    }
+      }, 50);
+    });
   });
 });
