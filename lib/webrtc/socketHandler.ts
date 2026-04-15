@@ -73,6 +73,6 @@ export function setupSocketHandlers(io: Server) {
       });
     });
   });
-
+  
   return rooms; // exported for testing purposes if needed
 }

@@ -12,7 +12,6 @@ export function useUserMedia() {
 
   useEffect(() => {
     let active = true;
-
     async function getMedia() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -41,14 +40,11 @@ export function useUserMedia() {
         if (active) setIsLoading(false);
       }
     }
-
     getMedia();
-
     return () => {
       active = false;
     };
   }, []);
-
   // Stop all tracks (call during hangup or unmount)
   const stopTracks = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
